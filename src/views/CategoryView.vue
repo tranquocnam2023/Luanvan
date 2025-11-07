@@ -1,184 +1,217 @@
 <!-- src/views/CategoryView.vue -->
 <template>
-  <div class="flex h-screen bg-gray-50">
-    <!-- LEFT: List -->
-    <div class="flex-[1.15] bg-white border-r border-gray-200 flex flex-col">
-      <!-- Header -->
-      <div class="px-5 py-4 border-b bg-white flex items-center justify-between">
-        <h2 class="text-xl font-semibold text-gray-900">Categories</h2>
-        <div class="flex items-center gap-3">
-          <div class="hidden md:flex items-center gap-2">
-            <input v-model="search" type="text" placeholder="Tìm theo tên…"
-              class="px-3 py-2 border rounded-md text-sm w-56">
-            <select v-model.number="pageSize" class="px-2 py-2 border rounded-md text-sm">
-              <option :value="10">10</option>
-              <option :value="20">20</option>
-              <option :value="50">50</option>
-              <option :value="100">100</option>
-            </select>
-            <button class="px-3 py-2 border rounded-md text-sm" :disabled="selectedIds.length === 0" @click="bulkDelete">
-              Xoá đã chọn ({{ selectedIds.length }})
-            </button>
-          </div>
-          <button @click="openAdd" class="bg-green-600 hover:bg-green-700 text-white px-3.5 py-2.5 rounded-md text-sm">
-            Thêm vào categories
-          </button>
-        </div>
-      </div>
+  <!-- Loading Spinner -->
+  <div v-if="loading" class="flex justify-center items-center h-64">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 shadow-lg"></div>
+  </div>
 
-      <!-- Filters on mobile -->
-      <div class="md:hidden px-4 py-3 flex gap-2 border-b bg-gray-50">
+  <!-- Error Message -->
+  <div v-else-if="error" class="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-xl mb-6 shadow-sm animate-pulse">
+    {{ error }}
+    <button @click="clearError" class="float-right text-red-500 hover:text-red-700 transition-colors duration-200">×</button>
+  </div>
+
+  <!-- Categories Table -->
+  <div v-else-if="filtered.length > 0" class="bg-white rounded-2xl shadow-xl overflow-hidden transform transition-all hover:shadow-2xl">
+    <!-- Header with Add Button -->
+    <div class="px-6 py-6 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <i class="fa-solid fa-layer-group text-2xl text-blue-600"></i>
+        <h2 class="text-2xl font-bold text-gray-900">Danh sách loại hàng hóa</h2>
+      </div>
+      <div class="flex items-center gap-3">
         <input v-model="search" type="text" placeholder="Tìm theo tên…"
-          class="flex-1 px-3 py-2 border rounded-md text-sm">
-        <select v-model.number="pageSize" class="px-2 py-2 border rounded-md text-sm">
+          class="px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-0 focus:border-blue-500 transition-all duration-200">
+        <select v-model.number="pageSize" class="px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-0 focus:border-blue-500 transition-all duration-200">
           <option :value="10">10</option>
           <option :value="20">20</option>
           <option :value="50">50</option>
           <option :value="100">100</option>
         </select>
-      </div>
-
-      <!-- Table -->
-      <div class="flex-1 overflow-auto">
-        <!-- loading -->
-        <div v-if="loading" class="h-56 flex items-center justify-center">
-          <div class="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-t-blue-600"></div>
-        </div>
-
-        <!-- error -->
-        <div v-else-if="error" class="m-4 p-4 rounded-md bg-red-50 text-red-700 border border-red-200 relative">
-          {{ error }}
-          <button @click="clearError" class="absolute right-2 top-2 text-red-500">×</button>
-        </div>
-
-        <!-- empty -->
-        <div v-else-if="filtered.length === 0" class="p-8 text-center text-gray-600">
-          Không có bản ghi.
-        </div>
-
-        <!-- table -->
-        <table v-else class="min-w-full text-sm">
-          <thead class="bg-gray-50 border-y">
-            <tr class="text-left text-gray-600">
-              <th class="w-10 px-4 py-3">
-                <input type="checkbox" :checked="isAllPageChecked" @change="toggleCheckAll($event)">
-              </th>
-              <th class="w-40 px-4 py-3">Id</th>
-              <th class="px-4 py-3">CategoryName</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in renderedRows" :key="row.catId"
-              class="border-b hover:bg-blue-50 cursor-pointer"
-              :class="{ 'bg-gray-50/30': row.level > 0 }"
-              @click="selectRow(row.cat)">
-              <td class="px-4 py-3" @click.stop>
-                <input type="checkbox" :value="row.catId" v-model="selectedIds">
-              </td>
-              <td class="px-4 py-3">
-                <button class="text-blue-600 hover:underline" @click.stop="selectRow(row.cat)">{{ row.catId }}</button>
-              </td>
-              <td class="px-4 py-3 text-gray-900">
-                <div class="flex items-center gap-2" :style="{ paddingLeft: `${row.level * 24}px` }">
-                  <button
-                    v-if="row.hasChildren"
-                    @click.stop="toggleCollapse(row.catId)"
-                    class="w-5 h-5 flex items-center justify-center text-gray-600 hover:text-gray-900 flex-shrink-0"
-                  >
-                    <i :class="row.isCollapsed ? 'fa-solid fa-chevron-right text-xs' : 'fa-solid fa-chevron-down text-xs'"></i>
-                  </button>
-                  <span v-else class="w-5 flex-shrink-0"></span>
-                  <span :class="{ 'font-semibold': row.level === 0 }">{{ row.catName }}</span>
-                  <span
-                    v-if="row.hasChildren"
-                    class="ml-2 px-2 py-0.5 bg-gray-200 text-gray-700 text-xs rounded-full font-medium"
-                  >
-                    {{ row.childrenCount }}
-                  </span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Pagination -->
-      <div class="border-t bg-white px-4 py-3 flex items-center justify-between">
-        <div class="text-xs text-gray-500">
-          Trang {{ currentPage }} / {{ totalPages }} — Tổng {{ filtered.length }}
-        </div>
-        <div class="flex gap-2">
-          <button class="px-3 py-1.5 border rounded-md text-sm" :disabled="currentPage === 1"
-            @click="goto(currentPage - 1)">Trước</button>
-          <button class="px-3 py-1.5 border rounded-md text-sm" :disabled="currentPage === totalPages"
-            @click="goto(currentPage + 1)">Sau</button>
-        </div>
+        <button
+          @click="openAdd"
+          class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl hover:shadow-lg transform hover:scale-105 transition-all duration-300 flex items-center space-x-2 shadow-md"
+        >
+          <i class="fa-solid fa-plus"></i>
+          <span>Thêm loại hàng hóa</span>
+        </button>
       </div>
     </div>
 
-    <!-- RIGHT: Detail / Edit -->
-    <div class="flex-[0.85] hidden lg:flex flex-col bg-white" v-if="selectedCategory || editMode">
-      <div class="px-6 py-5 border-b bg-blue-50 flex items-center justify-between">
-        <h3 class="text-lg font-semibold text-gray-900">
-          {{ editMode ? (selectedCategory ? 'Sửa' : 'Thêm mới') : 'Chi tiết' }}
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Id</th>
+            <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Tên loại hàng hóa</th>
+            <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Hành động</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <tr v-for="row in renderedRows" :key="row.catId" class="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 animate-fade-in"
+            :class="{ 'bg-gray-50/30': row.level > 0 }">
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 bg-gray-50 rounded-l-lg">{{ row.catId }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+              <div class="flex items-center gap-2" :style="{ paddingLeft: `${row.level * 24}px` }">
+                <button v-if="row.hasChildren" @click.stop="toggleCollapse(row.catId)"
+                  class="w-5 h-5 flex items-center justify-center text-gray-600 hover:text-gray-900 flex-shrink-0">
+                  <i :class="row.isCollapsed ? 'fa-solid fa-chevron-right text-xs' : 'fa-solid fa-chevron-down text-xs'"></i>
+                </button>
+                <span v-else class="w-5 flex-shrink-0"></span>
+                <span :class="{ 'font-semibold': row.level === 0 }">{{ row.catName }}</span>
+                <span v-if="row.hasChildren" class="ml-2 px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                  {{ row.childrenCount }}
+                </span>
+              </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3 rounded-r-lg">
+              <button
+                @click="openEditModal(row.cat)"
+                class="text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 px-3 py-2 rounded-lg transition-all duration-200 transform hover:scale-105"
+              >
+                <i class="fa-solid fa-edit mr-1"></i> Sửa
+              </button>
+              <button
+                @click="confirmDelete(row.cat)"
+                class="text-red-600 hover:text-red-900 hover:bg-red-50 px-3 py-2 rounded-lg transition-all duration-200 transform hover:scale-105"
+              >
+                <i class="fa-solid fa-trash mr-1"></i> Xóa
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="px-6 py-6 border-t border-gray-100 bg-gradient-to-r from-gray-50 to-gray-100 flex justify-between items-center">
+      <div class="text-sm text-gray-600">
+        Hiển thị <span class="font-bold text-gray-900">{{ (currentPage - 1) * pageSize + 1 }}</span> đến
+        <span class="font-bold text-gray-900">{{ Math.min(currentPage * pageSize, filtered.length) }}</span> của
+        <span class="font-bold text-gray-900">{{ filtered.length }}</span> kết quả
+      </div>
+      <div class="flex space-x-2">
+        <button
+          @click="goto(currentPage - 1)"
+          :disabled="currentPage === 1"
+          class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
+        >
+          <i class="fa-solid fa-chevron-left mr-1"></i> Trước
+        </button>
+        <button
+          @click="goto(i)"
+          v-for="i in Math.min(5, totalPages)"
+          :key="i"
+          :class="[
+            'px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold transition-all duration-200 transform hover:scale-105',
+            i === currentPage ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md' : 'text-gray-700 bg-white hover:bg-gray-50'
+          ]"
+        >
+          {{ i }}
+        </button>
+        <span v-if="totalPages > 5" class="px-4 py-2 text-sm text-gray-500">...</span>
+        <button
+          v-if="totalPages > 5"
+          @click="goto(totalPages)"
+          class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200 transform hover:scale-105"
+        >
+          {{ totalPages }}
+        </button>
+        <button
+          @click="goto(currentPage + 1)"
+          :disabled="currentPage === totalPages"
+          class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
+        >
+          Sau <i class="fa-solid fa-chevron-right mr-1"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty State -->
+  <div v-else-if="filtered.length === 0" class="text-center py-16 bg-white rounded-2xl shadow-xl">
+    <i class="fa-solid fa-layer-group text-6xl text-gray-300 mb-6 animate-bounce"></i>
+    <h3 class="text-2xl font-bold text-gray-900 mb-3">Chưa có loại hàng hóa nào</h3>
+    <p class="text-gray-500 mb-6 text-lg">Bắt đầu bằng cách thêm loại hàng hóa đầu tiên.</p>
+    <button
+      @click="openAdd"
+      class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-xl hover:shadow-lg transform hover:scale-105 transition-all duration-300 shadow-md"
+    >
+      <i class="fa-solid fa-plus mr-2"></i> Thêm loại hàng hóa
+    </button>
+  </div>
+
+  <!-- Add/Edit Category Modal -->
+  <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-100">
+      <div class="p-6 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <h3 class="text-xl font-bold text-gray-900">
+          {{ isEditMode ? 'Sửa loại hàng hóa' : 'Thêm loại hàng hóa mới' }}
         </h3>
-        <div class="flex gap-2">
-          <button v-if="!editMode && selectedCategory" class="px-3 py-2 border rounded-md text-sm"
-            @click="startEdit">Sửa</button>
-          <button v-if="!editMode && selectedCategory" class="px-3 py-2 border rounded-md text-sm text-red-600"
-            @click="confirmDelete(selectedCategory!)">Xoá</button>
-          <button class="px-3 py-2 border rounded-md text-sm" @click="closeDetail">Đóng</button>
-        </div>
       </div>
-
-      <!-- Content -->
-      <div class="flex-1 overflow-auto p-6">
-        <!-- Form -->
-        <form v-if="editMode" class="space-y-5 max-w-xl" @submit.prevent="handleSubmit">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tên loại</label>
-            <input v-model.trim="formData.CategoryName" class="w-full px-3 py-2 border rounded-md" required>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Loại cha</label>
-            <select v-model.number="formData.ParentCategoryId" class="w-full px-3 py-2 border rounded-md">
-              <option :value="0">-- Không có --</option>
-              <option v-for="c in parentOptions" :key="c.Id" :value="c.Id">{{ c.CategoryName }}</option>
-            </select>
-          </div>
-          <div class="pt-2 flex gap-2">
-            <button type="button" class="px-4 py-2 border rounded-md" @click="cancelEdit">Huỷ</button>
-            <button type="submit" :disabled="submitting" class="px-4 py-2 rounded-md bg-blue-600 text-white">
-              <i v-if="submitting" class="fa-solid fa-spinner fa-spin mr-2"></i>
-              {{ selectedCategory ? 'Cập nhật' : 'Thêm mới' }}
-            </button>
-          </div>
-        </form>
-
-        <!-- View -->
-        <div v-else class="space-y-4">
-          <div class="text-sm text-gray-500">ID</div>
-          <div class="text-lg font-semibold">{{ selectedCategory!.Id }}</div>
-          <div class="text-sm text-gray-500">Tên loại</div>
-          <div class="text-lg font-semibold">{{ selectedCategory!.CategoryName }}</div>
-          <div class="text-sm text-gray-500">Loại cha</div>
-          <div class="text-base">{{ parentName }}</div>
+      <form @submit.prevent="handleSubmit" class="p-6 space-y-6">
+        <div class="space-y-2">
+          <label class="block text-sm font-semibold text-gray-700">Tên loại hàng hóa</label>
+          <input
+            v-model.trim="formData.CategoryName"
+            type="text"
+            required
+            class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-0 focus:border-blue-500 transition-all duration-200"
+          />
         </div>
-      </div>
+        <div class="space-y-2">
+          <label class="block text-sm font-semibold text-gray-700">Loại cha</label>
+          <select
+            v-model.number="formData.ParentCategoryId"
+            class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-0 focus:border-blue-500 transition-all duration-200"
+          >
+            <option :value="0">-- Không có --</option>
+            <option v-for="c in parentOptions" :key="c.id || c.Id" :value="c.id || c.Id">{{ c.categoryName || c.CategoryName }}</option>
+          </select>
+        </div>
+        <div class="flex justify-end space-x-3 pt-6">
+          <button
+            type="button"
+            @click="closeModal"
+            class="px-6 py-3 text-gray-700 bg-gray-200 rounded-xl hover:bg-gray-300 transition-all duration-200 transform hover:scale-105"
+          >
+            Hủy
+          </button>
+          <button
+            type="submit"
+            :disabled="submitting"
+            class="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg disabled:opacity-50 transition-all duration-200 transform hover:scale-105 flex items-center space-x-2 shadow-md"
+          >
+            <i v-if="submitting" class="fa-solid fa-spinner fa-spin"></i>
+            <span>{{ isEditMode ? 'Cập nhật' : 'Thêm' }}</span>
+          </button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <!-- Delete Modal -->
-    <div v-if="showDeleteModal" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div class="px-5 py-4 border-b">
-          <h4 class="font-semibold">Xác nhận xoá</h4>
-        </div>
-        <div class="px-5 py-4">
-          Bạn chắc chắn muốn xoá <b>{{ deleteName }}</b>?
-        </div>
-        <div class="px-5 py-4 border-t flex justify-end gap-2">
-          <button class="px-3 py-2 border rounded-md" @click="showDeleteModal = false">Huỷ</button>
-          <button class="px-3 py-2 rounded-md bg-red-600 text-white" @click="handleDelete">Xoá</button>
+  <!-- Delete Confirmation Modal -->
+  <div v-if="showDeleteModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+      <div class="p-6 bg-gradient-to-r from-red-50 to-pink-50 rounded-t-2xl">
+        <h3 class="text-xl font-bold text-gray-900 mb-2">Xác nhận xóa</h3>
+        <p class="text-gray-600">Bạn có chắc chắn muốn xóa loại hàng hóa <strong class="text-red-600">{{ deleteName }}</strong>? Hành động này không thể hoàn tác.</p>
+      </div>
+      <div class="p-6 border-t border-gray-200">
+        <div class="flex justify-end space-x-3">
+          <button
+            @click="showDeleteModal = false"
+            class="px-6 py-3 text-gray-700 bg-gray-200 rounded-xl hover:bg-gray-300 transition-all duration-200 transform hover:scale-105"
+          >
+            Hủy
+          </button>
+          <button
+            @click="handleDelete"
+            class="px-6 py-3 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all duration-200 transform hover:scale-105 shadow-md"
+          >
+            Xóa
+          </button>
         </div>
       </div>
     </div>
@@ -205,9 +238,9 @@ const search = ref('')
 const selectedIds = ref<number[]>([])
 const collapsed = ref<Record<number, boolean>>({})
 
-// right panel
-const selectedCategory = ref<CategoryResponse | null>(null)
-const editMode = ref(false)
+// modal states
+const showModal = ref(false)
+const isEditMode = ref(false)
 const submitting = ref(false)
 const formData = ref<CategoryRequest>({ Id: 0, CategoryName: '', ParentCategoryId: 0 })
 
@@ -335,44 +368,55 @@ const goto = (p: number) => {
   currentPage.value = p
 }
 
-const parentOptions = computed(() => {
-  if (!selectedCategory.value) return flat.value
-  return flat.value.filter(c => c.Id !== selectedCategory.value!.Id)
-})
+// Helper to flatten all categories including nested children
+const flattenAllCategories = (cats: any[]): any[] => {
+  const result: any[] = []
+  const traverse = (items: any[]) => {
+    for (const item of items) {
+      result.push(item)
+      const children = item.childCates || item.ChildCategories
+      if (children && children.length > 0) {
+        traverse(children)
+      }
+    }
+  }
+  traverse(cats)
+  return result
+}
 
-const parentName = computed(() => {
-  const pid = selectedCategory.value?.ParentCategoryId || 0
-  if (!pid) return '-- Không có --'
-  const p = flat.value.find(c => c.Id === pid)
-  return p ? p.CategoryName : 'Không xác định'
+const allCategories = computed(() => flattenAllCategories(flat.value))
+
+const parentOptions = computed(() => {
+  if (!formData.value.Id) return allCategories.value
+  return allCategories.value.filter(c => {
+    const cId = c.id || c.Id
+    return cId !== formData.value.Id
+  })
 })
 
 // actions
-const selectRow = (cat: CategoryResponse) => {
-  selectedCategory.value = cat
-  editMode.value = false
-}
-
 const openAdd = () => {
-  selectedCategory.value = null
-  editMode.value = true
-  formData.value = { Id: 0, CategoryName: '', ParentCategoryId: null }
+  isEditMode.value = false
+  formData.value = { Id: 0, CategoryName: '', ParentCategoryId: 0 }
+  showModal.value = true
 }
 
-const startEdit = () => {
-  if (!selectedCategory.value) return
-  editMode.value = true
+const openEditModal = (cat: any) => {
+  isEditMode.value = true
+  const catId = cat.id || cat.Id
+  const catName = cat.categoryName || cat.CategoryName
+  const parentId = cat.parentCategoryId || cat.ParentCategoryId
   formData.value = {
-    Id: selectedCategory.value.Id,
-    CategoryName: selectedCategory.value.CategoryName,
-    ParentCategoryId: selectedCategory.value.ParentCategoryId ?? null
+    Id: catId,
+    CategoryName: catName,
+    ParentCategoryId: parentId ?? 0
   }
+  showModal.value = true
 }
 
-const cancelEdit = () => (editMode.value = false)
-const closeDetail = () => {
-  selectedCategory.value = null
-  editMode.value = false
+const closeModal = () => {
+  showModal.value = false
+  submitting.value = false
 }
 
 import { nextTick } from "vue";
@@ -382,32 +426,21 @@ const handleSubmit = async () => {
   submitting.value = true;
 
   try {
-    let savedCategory: CategoryResponse | null = null;
-
-    if (formData.value.Id && selectedCategory.value) {
+    if (formData.value.Id && isEditMode.value) {
       //  Cập nhật
-      const updated = await updateCategory({ ...formData.value });
-      savedCategory = updated || null;
+      await updateCategory({ ...formData.value });
     } else {
       //  Thêm mới
-      const added = await addCategory({ ...formData.value, Id: 0 });
-      savedCategory = added || null;
+      await addCategory({ ...formData.value, Id: 0 });
     }
 
     //  Gọi lại danh sách sau khi thêm/sửa
     await getAllCategories({ pageIndex: 1, pageSize: 1000 });
     await nextTick(); // đảm bảo reactive cập nhật
 
-    //  Nếu BE không trả category mới -> tìm lại trong danh sách
-    if (!savedCategory && formData.value.Id) {
-      savedCategory = flat.value.find(x => x.Id === formData.value.Id) || null;
-    }
-
-    selectedCategory.value = savedCategory;
-    editMode.value = false;
-
+    closeModal();
     //  Thông báo thành công
-    alert(selectedCategory.value ? 'Cập nhật thành công!' : 'Thêm mới thành công!');
+    alert(isEditMode.value ? 'Cập nhật thành công!' : 'Thêm mới thành công!');
   } catch (error) {
     console.error('Update/Add category failed:', error);
     alert('Có lỗi xảy ra khi lưu category!');
@@ -417,9 +450,9 @@ const handleSubmit = async () => {
 };
 
 
-const confirmDelete = (c: CategoryResponse) => {
-  deleteId.value = c.Id
-  deleteName.value = c.CategoryName
+const confirmDelete = (cat: any) => {
+  deleteId.value = cat.id || cat.Id
+  deleteName.value = cat.categoryName || cat.CategoryName
   showDeleteModal.value = true
 }
 
@@ -427,7 +460,6 @@ const handleDelete = async () => {
   if (!deleteId.value) return
   await deleteCategory(deleteId.value)
   showDeleteModal.value = false
-  selectedCategory.value = null
   await getAllCategories({ pageIndex: 1, pageSize: 1000 })
 }
 
@@ -444,4 +476,13 @@ const bulkDelete = async () => {
 
 <style>
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css");
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>
